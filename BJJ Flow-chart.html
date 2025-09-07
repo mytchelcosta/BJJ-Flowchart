@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BJJ Flowchart Builder</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/drawflow/dist/drawflow.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/drawflow/dist/drawflow.min.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* Estilização base com tema escuro e gradientes sutis */
+    body {
+      background-color: #050505;
+      background-image: radial-gradient(circle at top right, rgba(126, 34, 206, 0.08), transparent 40%),
+                        radial-gradient(circle at bottom left, rgba(29, 78, 216, 0.08), transparent 40%);
+      font-family: 'Inter', sans-serif;
+      transition: all 0.3s ease-in-out;
+    }
+
+    /* Efeito "Glassmorphism" para os cards da barra lateral */
+    .sidebar-card {
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      background-color: rgba(26, 26, 26, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      transition: all 0.2s ease-in-out;
+    }
+    .sidebar-card:hover {
+      background-color: rgba(35, 35, 35, 0.7);
+      border-color: rgba(255, 255, 255, 0.15);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    }
+    
+    /* Estilo dos nós no canvas */
+    .node-card {
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+      padding: 0.75rem 1rem;
+      text-align: center;
+      min-width: 150px;
+    }
+
+    /* Textos editáveis e placeholders */
+    [contenteditable="false"] {
+        cursor: default;
+    }
+    [contenteditable="true"] {
+        outline: 1px dashed rgba(255,255,255,0.3);
+        cursor: text;
+    }
+    .is-editing {
+        background-color: rgba(255,255,255,0.1);
+        border-radius: 4px;
+        box-shadow: 0 0 5px rgba(80, 150, 255, 0.5);
+    }
+    .is-editing[data-placeholder]:empty:before {
+        content: attr(data-placeholder);
+        color: rgba(255, 255, 255, 0.4);
+        pointer-events: none;
+    }
+     [contenteditable][placeholder]:empty:before {
+        content: attr(placeholder);
+        color: rgba(255, 255, 255, 0.4);
+        pointer-events: none;
+    }
+    
+    /* Ícone posicionado acima do nó (sem fundo) */
+    .node-icon-top {
+      position: absolute;
+      top: -32px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Botão de edição para cards customizados */
+    .edit-btn-wrapper {
+        position: absolute;
+        bottom: -15px;
+        left: 50%;
+        transform: translateX(-50%);
+        opacity: 0;
+        transition: opacity 0.2s ease-in-out;
+        z-index: 10;
+        pointer-events: none;
+    }
+    .drawflow-node:hover .edit-btn-wrapper, .edit-btn-wrapper.is-active {
+        opacity: 1;
+        pointer-events: all;
+    }
+    .drawflow-node.text-node .edit-btn-wrapper {
+        bottom: -5px;
+    }
+    .edit-btn {
+        background-color: rgba(30, 30, 30, 0.8);
+        backdrop-filter: blur(5px);
+        -webkit-backdrop-filter: blur(5px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    }
+    .edit-btn:hover { background-color: rgba(50, 50, 50, 0.9); }
+
+    /* Estilo do sumário (título da categoria) */
+    summary {
+      color: #e5e5e5;
+      transition: color 0.2s;
+    }
+    summary:hover { color: #fff; }
+    
+    /* Customização das linhas de conexão do Drawflow */
+    .drawflow .connection .main-path {
+      stroke: rgba(156, 163, 175, 0.7) !important;
+      stroke-width: 2px !important;
+    }
+    
+    /* Destaque para nó selecionado */
+    .drawflow-node.selected .node-card {
+        box-shadow: 0 0 12px rgba(250, 250, 250, 0.4), 0 0 0 2px rgba(255, 255, 255, 0.5);
+    }
+    .drawflow-node.text-node.selected .text-node-content {
+        border-color: rgba(59, 130, 246, 0.7);
+    }
+
+
+    /* Remove estilos padrão do nó do Drawflow */
+    .drawflow-node {
+      background: transparent !important;
+      border: 0 !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+    }
+
+    /* Customização da barra de rolagem */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.05); }
+    ::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: #444; }
+    
+    /* Estilo do Modal e Overlay */
+    .modal-backdrop {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background-color: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(5px);
+        -webkit-backdrop-filter: blur(5px);
+        display: flex; justify-content: center; align-items: center;
+        z-index: 1000;
+        opacity: 0; visibility: hidden;
+        transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+    .modal-backdrop.show { opacity: 1; visibility: visible; }
+    .modal-content {
+        background: linear-gradient(145deg, #1a1a1a, #101010);
+        padding: 2rem; border-radius: 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        transform: scale(0.95);
+        transition: transform 0.3s ease;
+        max-width: 90vw; width: 600px;
+    }
+     .modal-backdrop.show .modal-content { transform: scale(1); }
+
+    /* Estilos para UI Colapsável */
+    #sidebar, #top-controls {
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    #sidebar.no-transition {
+        transition: none !important;
+    }
+    #ui-toggle-btn {
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    body.focus-mode #sidebar {
+        width: 0 !important;
+        transform: translateX(-100%);
+        padding: 0;
+    }
+     body.focus-mode #sidebar + #sidebar-resizer {
+        transform: translateX(-100%);
+     }
+
+    body.focus-mode #top-controls {
+        transform: translateY(-150%);
+        opacity: 0;
+    }
+    body.focus-mode #ui-toggle-btn {
+        background-color: rgba(29, 78, 216, 0.5);
+    }
+    
+    /* Divisória da barra lateral */
+    #sidebar-resizer {
+        width: 5px;
+        cursor: col-resize;
+        background-color: rgba(255,255,255,0.03);
+        border-right: 1px solid rgba(255,255,255,0.07);
+        transition: background-color 0.2s;
+        flex-shrink: 0;
+    }
+    #sidebar-resizer:hover, body.is-resizing #sidebar-resizer {
+        background-color: rgba(29, 78, 216, 0.5);
+    }
+
+    /* Classe para estado de redimensionamento */
+    body.is-resizing {
+        cursor: col-resize;
+        user-select: none;
+    }
+    
+    details > summary {
+      list-style: none;
+    }
+    details > summary::-webkit-details-marker {
+      display: none;
+    }
+    details[open] summary .chevron {
+        transform: rotate(180deg);
+    }
+    
+    /* Estilos para o nó de Texto */
+    .drawflow-node.text-node .drawflow_content_node {
+        padding: 0;
+        display: block;
+    }
+    .drawflow-node.text-node {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+    .text-node-content {
+        padding: 8px 16px;
+        font-size: 1.5rem; /* 24px */
+        font-weight: 700;
+        color: #e5e7eb; /* gray-200 */
+        background-color: transparent;
+        border: 2px dashed transparent;
+        border-radius: 8px;
+        outline: none;
+        min-width: 200px;
+        text-align: center;
+    }
+    .text-node-content[contenteditable="false"]:hover {
+        border-color: rgba(255, 255, 255, 0.2);
+        background-color: rgba(255, 255, 255, 0.05);
+    }
+    .text-node-content[data-placeholder]:empty:before {
+        content: attr(data-placeholder);
+        color: rgba(255, 255, 255, 0.4);
+        pointer-events: none;
+        text-align: center;
+    }
+  </style>
+</head>
+<body class="h-screen w-screen flex text-gray-200 overflow-hidden">
+  <!-- Barra lateral com a enciclopédia de técnicas -->
+  <aside id="sidebar" style="width: 384px;" class="bg-black/40 p-4 overflow-y-auto flex flex-col flex-shrink-0">
+    <div class="flex items-center space-x-2 pb-4 border-b border-neutral-800 mb-4">
+        <i data-lucide="swords" class="text-blue-400 w-6 h-6"></i>
+        <h1 class="text-xl font-bold text-gray-100">BJJ Game Plan</h1>
+    </div>
+    <div class="relative mb-4">
+        <input type="text" id="search-input" placeholder="Buscar técnica..." class="w-full bg-neutral-900/50 border border-neutral-700 rounded-lg py-2 pl-10 pr-4 text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors">
+        <i data-lucide="search" class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 w-5 h-5"></i>
+    </div>
+    <button id="add-custom-card-btn" class="sidebar-card p-3 mb-4 rounded-lg flex items-center justify-center cursor-pointer text-gray-300 w-full">
+        <i data-lucide="plus-square" class="w-5 h-5 mr-3"></i>
+        <span>Adicionar Personalizado</span>
+    </button>
+    <div id="encyclopedia" class="flex-grow space-y-2 overflow-y-auto"></div>
+  </aside>
+
+  <div id="sidebar-resizer"></div>
+
+  <!-- Área principal do canvas -->
+  <main class="flex-1 relative flex flex-col">
+    <div id="flowchart-header" class="p-4 text-center border-b border-neutral-800">
+        <h2 id="flowchart-title" contenteditable="true" placeholder="Título do seu Flowchart" class="text-2xl font-bold text-white outline-none"></h2>
+        <p id="flowchart-subtitle" contenteditable="true" placeholder="Subtítulo ou descrição" class="text-sm text-gray-400 outline-none"></p>
+        <p id="flowchart-date" class="text-xs text-gray-500 mt-1"></p>
+    </div>
+    <div id="drawflow-wrapper" class="flex-grow relative">
+        <div id="drawflow" class="drawflow w-full h-full bg-transparent"></div>
+        <button id="ui-toggle-btn" title="Modo Foco" class="absolute top-4 left-4 px-3 py-1 bg-neutral-800/80 rounded hover:bg-neutral-700 transition-colors z-10">
+            <i data-lucide="eye" class="w-5 h-5"></i>
+        </button>
+        <div id="top-controls" class="absolute top-4 right-4 bg-black/50 rounded-lg shadow-lg p-2 flex space-x-2 border border-neutral-700 backdrop-filter backdrop-blur-md">
+          <button id="save-btn" title="Salvar" class="px-3 py-1 bg-neutral-800/80 rounded hover:bg-neutral-700 transition-colors"><i data-lucide="save" class="w-5 h-5"></i></button>
+          <button id="load-btn" title="Carregar" class="px-3 py-1 bg-neutral-800/80 rounded hover:bg-neutral-700 transition-colors"><i data-lucide="folder-open" class="w-5 h-5"></i></button>
+          <button id="zoom-in" title="Aproximar" class="px-3 py-1 bg-neutral-800/80 rounded hover:bg-neutral-700 transition-colors"><i data-lucide="zoom-in" class="w-5 h-5"></i></button>
+          <button id="zoom-out" title="Afastar" class="px-3 py-1 bg-neutral-800/80 rounded hover:bg-neutral-700 transition-colors"><i data-lucide="zoom-out" class="w-5 h-5"></i></button>
+          <button id="zoom-reset" title="Resetar Zoom" class="px-3 py-1 bg-neutral-800/80 rounded hover:bg-neutral-700 transition-colors"><i data-lucide="scan" class="w-5 h-5"></i></button>
+          <button id="clear-canvas" title="Limpar Canvas" class="px-3 py-1 bg-red-800/50 rounded hover:bg-red-700/60 transition-colors"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
+        </div>
+    </div>
+  </main>
+
+  <!-- Input de arquivo escondido para carregar o flowchart -->
+  <input type="file" id="load-input" class="hidden" accept=".json">
+
+  <!-- Modal de confirmação para limpar o canvas -->
+  <div id="confirmation-modal" class="modal-backdrop">
+      <div class="modal-content text-center">
+          <h3 class="text-lg font-bold mb-2 text-white">Confirmação</h3>
+          <p class="text-gray-400 mb-6">Você tem certeza que deseja limpar todo o fluxograma? Esta ação não pode ser desfeita.</p>
+          <div class="flex justify-center gap-4">
+              <button id="modal-cancel" class="px-6 py-2 rounded-lg bg-neutral-700 hover:bg-neutral-600 transition-colors">Cancelar</button>
+              <button id="modal-confirm" class="px-6 py-2 rounded-lg bg-red-600 hover:bg-red-500 transition-colors text-white">Limpar</button>
+          </div>
+      </div>
+  </div>
+
+  <!-- Modal para seleção de categoria do card customizado -->
+  <div id="category-modal" class="modal-backdrop">
+      <div class="modal-content">
+          <h3 class="text-xl font-bold mb-6 text-white text-center">Adicionar Item Personalizado</h3>
+          <div id="category-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <!-- Categorias serão injetadas aqui pelo JS -->
+          </div>
+      </div>
+  </div>
+
+  <!-- Modal de Erro -->
+  <div id="error-modal" class="modal-backdrop" style="z-index: 2001;">
+      <div class="modal-content text-center">
+          <div class="flex items-center justify-center text-red-500 mb-4">
+            <i data-lucide="alert-triangle" class="w-8 h-8 mr-3"></i>
+            <h3 class="text-xl font-bold">Ocorreu um Erro</h3>
+          </div>
+          <p id="error-message" class="text-gray-300 bg-neutral-800 p-4 rounded-lg mb-6 whitespace-pre-wrap text-left font-mono text-sm"></p>
+          <div class="flex justify-center">
+              <button id="error-modal-close" class="px-6 py-2 rounded-lg bg-neutral-700 hover:bg-neutral-600 transition-colors">Fechar</button>
+          </div>
+      </div>
+  </div>
+
+
+  <script>
+    // Definição de estilos (cores e ícones) para cada categoria de técnica
+    const CATEGORY_STYLES = {
+      "Texto": { color: "rgba(229, 231, 235, 0.8)", icon: "type" },
+      "Anotação": { color: "rgba(107, 114, 128, 0.8)", icon: "file-text" },
+      "Conceitos": { color: "rgba(107, 114, 128, 0.8)", icon: "brain-circuit" },
+      "Movimentações": { color: "rgba(236, 72, 153, 0.8)", icon: "move" },
+      "Pegadas": { color: "rgba(202, 138, 4, 0.8)", icon: "hand" },
+      "Quedas": { color: "rgba(133, 77, 14, 0.8)", icon: "arrow-down" },
+      "Guardas": { color: "rgba(29, 78, 216, 0.8)", icon: "shield" },
+      "Passagens de Guarda": { color: "rgba(126, 34, 206, 0.8)", icon: "corner-down-right" },
+      "Raspagens": { color: "rgba(5, 150, 105, 0.8)", icon: "arrow-up" },
+      "Posições de Controle": { color: "rgba(190, 24, 93, 0.8)", icon: "crown" },
+      "Transições": { color: "rgba(6, 182, 212, 0.8)", icon: "shuffle" },
+      "Fugas e Defesas": { color: "rgba(77, 124, 15, 0.8)", icon: "shield-off" },
+      "Contra-ataques": { color: "rgba(154, 52, 18, 0.8)", icon: "zap" },
+      "Finalizações": { color: "rgba(185, 28, 28, 0.8)", icon: "skull" },
+    };
+
+    // Base de dados
+    const BJJ_DATA = [
+        { category: "Conceitos", items: [ { id: 704, name_pt: "Ação-Reação", name_en: "Action-Reaction" }, { id: 717, name_pt: "Assimetria de Força", name_en: "Asymmetry" }, { id: 710, name_pt: "Conexão", name_en: "Connection" }, { id: 711, name_pt: "Controle da Linha Central", name_en: "Centerline Control" }, { id: 705, name_pt: "Controle de Distância", name_en: "Distance Management" }, { id: 712, name_pt: "Controle de Quadril", name_en: "Hip Control" }, { id: 706, name_pt: "Estrutura", name_en: "Structure" }, { id: 707, name_pt: "Frames (Estruturas)", name_en: "Frames" }, { id: 715, name_pt: "Hierarquia de Finalizações", name_en: "Submission Hierarchy" }, { id: 716, name_pt: "Hierarquia de Posições", name_en: "Positional Hierarchy" }, { id: 703, name_pt: "Kuzushi", name_en: "Off-balancing" }, { id: 709, name_pt: "Levers (Alavancas)", name_en: "Levers" }, { id: 714, name_pt: "Liderar e Enganar", name_en: "Leading & Misdirection" }, { id: 701, name_pt: "Postura e Base", name_en: "Posture & Base" }, { id: 702, name_pt: "Pressão", name_en: "Pressure" }, { id: 713, name_pt: "Timing e Ritmo", name_en: "Timing & Rhythm" }, { id: 708, name_pt: "Wedges (Cunhas)", name_en: "Wedges" } ] },
+        { category: "Movimentações", items: [ { id: 51, name_pt: "Fuga de Quadril", name_en: "Hip Escape / Shrimp" }, { id: 57, name_pt: "Fuga de Quadril Reversa", name_en: "Reverse Shrimp" }, { id: 55, name_pt: "Inversão", name_en: "Inversion / Granby" }, { id: 53, name_pt: "Levantada Técnica", name_en: "Technical Stand-up" }, { id: 52, name_pt: "Ponte / Upa", name_en: "Bridge" }, { id: 54, name_pt: "Rolamento de Ombro", name_en: "Shoulder Roll" }, { id: 58, name_pt: "Rolamento para Frente / Trás", name_en: "Forward/Backward Roll" }, { id: 56, name_pt: "Sprawl", name_en: "Sprawl" } ] },
+        { category: "Pegadas", items: [ { id: 8, name_pt: "Cinto de Segurança", name_en: "Seatbelt Grip" }, { id: 3, name_pt: "Duas na Gola", name_en: "Double Collar Grip" }, { id: 5, name_pt: "Duas na Manga", name_en: "Double Sleeve Grip" }, { id: 7, name_pt: "Esgrima / Underhook", name_en: "Underhook" }, { id: 2, name_pt: "Gola Cruzada", name_en: "Cross-Collar Grip" }, { id: 1, name_pt: "Gola e Manga", name_en: "Collar & Sleeve" }, { id: 9, name_pt: "Pegada de Bolso", name_en: "Pocket Grip" }, { id: 6, name_pt: "Pegada na Calça", name_en: "Pants Grip" }, { id: 10, name_pt: "Pegada na Faixa", name_en: "Belt Grip" }, { id: 11, name_pt: "Pegada na Lapela (Saia)", name_en: "Lapel Grip (Skirt)" }, { id: 4, name_pt: "Pegada Pistola", name_en: "Pistol Grip" } ] },
+        { category: "Quedas", items: [ { id: 103, name_pt: "Ankle Pick", name_en: "Ankle Pick" }, { id: 101, name_pt: "Baiana", name_en: "Double Leg" }, { id: 107, name_pt: "Harai Goshi", name_en: "Sweeping Hip Throw" }, { id: 115, name_pt: "Imanari Roll", name_en: "Imanari Roll" }, { id: 105, name_pt: "Ippon Seoi Nage", name_en: "One-Arm Shoulder Throw" }, { id: 114, name_pt: "Kani Basami", name_en: "Scissor Takedown" }, { id: 110, name_pt: "Kata Guruma", name_en: "Fireman's Carry" }, { id: 104, name_pt: "O-Soto-Gari", name_en: "Major Outer Reaping" }, { id: 109, name_pt: "Puxada para Guarda", name_en: "Guard Pull" }, { id: 102, name_pt: "Single Leg", name_en: "Single Leg" }, { id: 113, name_pt: "Sumi Gaeshi", name_en: "Corner Throw" }, { id: 111, name_pt: "Tani-Otoshi", name_en: "Valley Drop" }, { id: 108, name_pt: "Tomoe Nage", name_en: "Circle Throw" }, { id: 106, name_pt: "Uchi-Mata", name_en: "Inner Thigh Throw" }, { id: 112, name_pt: "Yoko Tomoe Nage", name_en: "Side Circle Throw" } ] },
+        { category: "Guardas", items: [ { id: 312, name_pt: "Guarda 50/50", name_en: "Fifty/Fifty Guard" }, { id: 316, name_pt: "Guarda Alta", name_en: "High Guard" }, { id: 305, name_pt: "Guarda Aranha", name_en: "Spider Guard" }, { id: 319, name_pt: "Guarda Ashi Garami", name_en: "Ashi Garami" }, { id: 311, name_pt: "Guarda Borboleta", name_en: "Butterfly Guard" }, { id: 317, name_pt: "Guarda Borracha", name_en: "Rubber Guard" }, { id: 307, name_pt: "Guarda De La Riva", name_en: "De La Riva Guard" }, { id: 308, name_pt: "De La Riva Invertida", name_en: "Reverse DLR" }, { id: 313, name_pt: "Guarda de Lapela", name_en: "Lapel Guard (Worm)" }, { id: 301, name_pt: "Guarda Fechada", name_en: "Closed Guard" }, { id: 314, name_pt: "Guarda K", name_en: "K-Guard" }, { id: 306, name_pt: "Guarda Laço", name_en: "Lasso Guard" }, { id: 318, name_pt: "Guarda Lockdown", name_en: "Lockdown" }, { id: 320, name_pt: "Guarda Sentada", name_en: "Seated Guard" }, { id: 321, name_pt: "Guarda The Saddle / Honeyhole", name_en: "The Saddle / Honeyhole" }, { id: 315, name_pt: "Guarda Tartaruga", name_en: "Turtle Guard" }, { id: 309, name_pt: "Guarda X", name_en: "X-Guard" }, { id: 304, name_pt: "Guarda-Z", name_en: "Z-Guard / Knee Shield" }, { id: 302, name_pt: "Meia Guarda", name_en: "Half Guard" }, { id: 303, name_pt: "Meia Guarda Profunda", name_en: "Deep Half Guard" }, { id: 310, name_pt: "Single Leg X", name_en: "Single Leg X-Guard" } ] },
+        { category: "Passagens de Guarda", items: [ { id: 406, name_pt: "Cruzando o Joelho", name_en: "Knee Slice" }, { id: 403, name_pt: "Double-Under", name_en: "Double-Under Pass" }, { id: 405, name_pt: "Leg Drag", name_en: "Leg Drag" }, { id: 402, name_pt: "Over-Under", name_en: "Over-Under Pass" }, { id: 401, name_pt: "Passagem Amassando", name_en: "Pressure Pass" }, { id: 412, name_pt: "Passagem Escalada", name_en: "Climbing Pass" }, { id: 407, name_pt: "Passagem Empilhando", name_en: "Stack Pass" }, { id: 410, name_pt: "Passagem Flutuante", name_en: "Floating / Knee Weave Pass" }, { id: 411, name_pt: "Passagem Mão por Dentro", name_en: "Inside Hand Pass" }, { id: 408, name_pt: "Passagem São Paulo", name_en: "São Paulo Pass / Tozi Pass" }, { id: 404, name_pt: "Toreada", name_en: "Bullfighter Pass" }, { id: 409, name_pt: "X-Pass", name_en: "X-Pass" } ] },
+        { category: "Raspagens", items: [ { id: 507, name_pt: "Beijo do Dragão", name_en: "Kiss of the Dragon" }, { id: 509, name_pt: "Flower Sweep", name_en: "Flower Sweep" }, { id: 505, name_pt: "Raspagem Balão", name_en: "Balloon Sweep" }, { id: 513, name_pt: "Raspagem com a Mão na Faixa", name_en: "Belt Grip Sweep" }, { id: 514, name_pt: "Raspagem com a Mão por Dentro da Perna", name_en: "Leg Inside Sweep" }, { id: 504, name_pt: "Raspagem de Gancho", name_en: "Hook Sweep (Butterfly)" }, { id: 508, name_pt: "Raspagem de Helicóptero", name_en: "Helicopter Sweep" }, { id: 506, name_pt: "Raspagem de Omoplata", name_en: "Omoplata Sweep" }, { id: 502, name_pt: "Raspagem de Pêndulo", name_en: "Pendulum Sweep" }, { id: 503, name_pt: "Raspagem de Quadril", name_en: "Hip Bump Sweep" }, { id: 501, name_pt: "Raspagem de Tesoura", name_en: "Scissor Sweep" }, { id: 512, name_pt: "Raspagem Lateral", name_en: "Side Sweep" }, { id: 515, name_pt: "Raspagem nos Calcanhares", name_en: "Heel Sweep" }, { id: 511, name_pt: "Tomahawk Sweep", name_en: "Tomahawk Sweep" }, { id: 510, name_pt: "Waiter Sweep", name_en: "Waiter Sweep" } ] },
+        { category: "Posições de Controle", items: [ { id: 203, name_pt: "Cem Quilos", name_en: "Side Control" }, { id: 208, name_pt: "Crucifixo", name_en: "Crucifix" }, { id: 204, name_pt: "Joelho na Barriga", name_en: "Knee on Belly" }, { id: 206, name_pt: "Kesa Gatame", name_en: "Scarf Hold" }, { id: 211, name_pt: "Kuzure Kesa-Gatame", name_en: "Modified Scarf Hold" }, { id: 201, name_pt: "Montada", name_en: "Full Mount" }, { id: 209, name_pt: "Montada em S", name_en: "S-Mount" }, { id: 207, name_pt: "Montada Técnica", name_en: "Technical Mount" }, { id: 205, name_pt: "Norte-Sul", name_en: "North-South" }, { id: 202, name_pt: "Pegada de Costas", name_en: "Back Control" }, { id: 210, name_pt: "Triângulo no Corpo", name_en: "Body Triangle" } ] },
+        { category: "Transições", items: [ { id: 803, name_pt: "Body Lock (Posição)", name_en: "Body Lock Position" }, { id: 804, name_pt: "Front Headlock", name_en: "Front Headlock" }, { id: 805, name_pt: "Kimura Trap", name_en: "Kimura Trap System" }, { id: 802, name_pt: "Leg Drag (Posição)", name_en: "Leg Drag Position" }, { id: 801, name_pt: "Quartel General (HQ)", name_en: "Headquarters Position" } ] },
+        { category: "Fugas e Defesas", items: [ { id: 906, name_pt: "Defesa de Armlock", name_en: "Armbar Defense" }, { id: 905, name_pt: "Defesa de Mata-Leão", name_en: "RNC Defense" }, { id: 901, name_pt: "Fuga da Montada", name_en: "Mount Escape (Upa)" }, { id: 903, name_pt: "Fuga das Costas", name_en: "Back Control Escape" }, { id: 902, name_pt: "Fuga dos 100 Quilos", name_en: "Side Control Escape" }, { id: 904, name_pt: "Reposição de Guarda", name_en: "Guard Retention" } ] },
+        { category: "Contra-ataques", items: [ { id: 1002, name_pt: "Contra de Kimura", name_en: "Kimura Counter" }, { id: 1001, name_pt: "Contra de Omoplata", name_en: "Omoplata Counter" }, { id: 1003, name_pt: "Contra de Single Leg", name_en: "Single Leg Counter" } ] },
+        { category: "Finalizações", items: [ { id: 605, name_pt: "Americana", name_en: "Americana (Keylock)" }, { id: 624, name_pt: "Americana Estendida", name_en: "Straight Arm Americana" }, { id: 619, name_pt: "Anaconda", name_en: "Anaconda Choke" }, { id: 608, name_pt: "Arco e Flecha", name_en: "Bow and Arrow Choke" }, { id: 603, name_pt: "Armlock", name_en: "Armbar (Juji Gatame)" }, { id: 625, name_pt: "Arm-lock (100kg)", name_en: "Side Control Armbar" }, { id: 626, name_pt: "Arm-lock Girando", name_en: "Spinning Arm-lock" }, { id: 617, name_pt: "Chave de Bíceps", name_en: "Bicep Slicer" }, { id: 627, name_pt: "Chave de Braço Lateral", name_en: "Side Armbar (from top)" }, { id: 613, name_pt: "Chave de Calcanhar", name_en: "Heel Hook" }, { id: 623, name_pt: "Chave de Dedão", name_en: "Toe Hold" }, { id: 612, name_pt: "Chave de Joelho", name_en: "Kneebar" }, { id: 618, name_pt: "Chave de Panturrilha", name_en: "Calf Slicer" }, { id: 611, name_pt: "Chave de Pé Reta", name_en: "Straight Ankle Lock" }, { id: 620, name_pt: "D'Arce", name_en: "D'Arce Choke" }, { id: 615, name_pt: "Estrangulamento Cruzado", name_en: "Cross-Collar Choke" }, { id: 628, name_pt: "Estrangulamento de Gola (Costas)", name_en: "Collar Choke (from Back)" }, { id: 629, name_pt: "Estrangulamento com o Braço na Nuca", name_en: "Short Choke" }, { id: 630, name_pt: "Estrangulamento com o Polegar", name_en: "Baseball Bat Choke" }, { id: 609, name_pt: "Ezequiel", name_en: "Ezekiel Choke" }, { id: 631, name_pt: "Gola Invertida", name_en: "Reverse Collar Choke" }, { id: 616, name_pt: "Gogoplata", name_en: "Gogoplata" }, { id: 607, name_pt: "Guilhotina", name_en: "Guillotine Choke" }, { id: 610, name_pt: "Katagatame", name_en: "Arm-Triangle Choke" }, { id: 604, name_pt: "Kimura", name_en: "Kimura (Ude Garami)" }, { id: 632, name_pt: "Kimura com Rolamento", name_en: "Rolling Kimura" }, { id: 621, name_pt: "Loop Choke", name_en: "Loop Choke" }, { id: 614, name_pt: "Mão de Vaca", name_en: "Wristlock" }, { id: 601, name_pt: "Mata-Leão", name_en: "Rear-Naked Choke" }, { id: 622, name_pt: "North-South Choke", name_en: "North-South Choke" }, { id: 606, name_pt: "Omoplata", name_en: "Omoplata" }, { id: 633, name_pt: "Omoplata com a Mão na Faixa", name_en: "Belt Grip Omoplata" }, { id: 602, name_pt: "Triângulo", name_en: "Triangle Choke" }, { id: 634, name_pt: "Reloginho", name_en: "Clock Choke" } ] },
+    ];
+
+    // Função para gerar o template HTML de um nó
+    function createNodeTemplate(category, namePt, nameEn, isAnnotation = false) {
+        const catStyle = CATEGORY_STYLES[category];
+        const contentEditable = `contenteditable="false"`;
+        const titlePlaceholder = isAnnotation ? 'data-placeholder="Título"' : '';
+        const subtitlePlaceholder = isAnnotation ? 'data-placeholder="Descrição"' : '';
+        
+        const editButtonHtml = isAnnotation ? `
+            <div class='edit-btn-wrapper'>
+                <div class='edit-btn' title="Editar anotação">
+                    <i data-lucide="pencil" class="w-4 h-4 text-gray-300 pointer-events-none"></i>
+                </div>
+            </div>` : '';
+
+        return `
+            <div class='relative flex flex-col items-center'>
+                <div class='node-icon-top'>
+                     <i data-lucide="${catStyle.icon}" class="w-8 h-8" style="color: ${catStyle.color}; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));"></i>
+                </div>
+                <div class='node-card text-white rounded-xl' style='background: linear-gradient(135deg, ${catStyle.color}, rgba(20,20,20,0.5)); border-color:${catStyle.color};'>
+                    <div class='font-bold text-base' ${contentEditable} ${titlePlaceholder} data-text-type="title">${namePt}</div>
+                    <div class='text-xs opacity-70' ${contentEditable} ${subtitlePlaceholder} data-text-type="subtitle">${nameEn}</div>
+                </div>
+                ${editButtonHtml}
+            </div>`;
+    }
+
+    // Função para alternar o modo de edição
+    function toggleEditMode(nodeElement, editor, forceState = null) {
+        if (!nodeElement) return;
+        const [titleEl, subtitleEl, wrapper, editBtn] = [
+            nodeElement.querySelector('[data-text-type="title"]'),
+            nodeElement.querySelector('[data-text-type="subtitle"]'),
+            nodeElement.querySelector('.edit-btn-wrapper'),
+            nodeElement.querySelector('.edit-btn')
+        ];
+        if (!titleEl || !subtitleEl || !wrapper || !editBtn) return;
+        
+        const isCurrentlyEditing = titleEl.contentEditable === 'true';
+        const desiredState = forceState !== null ? forceState : (isCurrentlyEditing ? 'view' : 'edit');
+        const nodeId = nodeElement.id.split('-')[1];
+        const nodeData = editor.getNodeFromId(nodeId);
+
+        if (desiredState === 'edit') {
+            nodeData.disableDrag = true;
+            [titleEl, subtitleEl].forEach(el => {
+                el.contentEditable = true;
+                el.classList.add('is-editing');
+            });
+            wrapper.classList.add('is-active');
+            editBtn.innerHTML = `<i data-lucide="check" class="w-4 h-4 text-green-400 pointer-events-none"></i>`;
+            editBtn.title = 'Confirmar';
+            titleEl.focus();
+        } else { // view state
+            nodeData.data.name_pt = titleEl.innerText;
+            nodeData.data.name_en = subtitleEl.innerText;
+            editor.updateNodeDataFromId(nodeId, nodeData.data);
+            [titleEl, subtitleEl].forEach(el => {
+                el.contentEditable = false;
+                el.classList.remove('is-editing');
+            });
+            wrapper.classList.remove('is-active');
+            nodeData.disableDrag = false;
+            editBtn.innerHTML = `<i data-lucide="pencil" class="w-4 h-4 text-gray-300 pointer-events-none"></i>`;
+            editBtn.title = 'Editar anotação';
+        }
+        lucide.createIcons();
+    }
+    
+    // Inicialização da aplicação
+    document.addEventListener("DOMContentLoaded", () => {
+        const encyclopediaEl = document.getElementById("encyclopedia");
+        const editor = new Drawflow(document.getElementById("drawflow"));
+        
+        editor.reroute = true;
+        editor.start();
+        
+        document.getElementById('flowchart-date').textContent = new Date().toLocaleDateString('pt-BR', { year: 'numeric', month: 'long', day: 'numeric' });
+
+        // Popula a barra lateral
+        BJJ_DATA.forEach(catData => {
+            const catStyle = CATEGORY_STYLES[catData.category];
+            if (!catStyle) return;
+            
+            catData.items.sort((a, b) => a.name_pt.localeCompare(b.name_pt));
+            const details = document.createElement("details");
+            details.className = "py-2";
+            const summary = document.createElement("summary");
+            summary.className = "cursor-pointer font-semibold flex items-center p-2 rounded-md hover:bg-neutral-800/60";
+            summary.innerHTML = `<i data-lucide="${catStyle.icon}" class="w-5 h-5 mr-3" style="color:${catStyle.color};"></i> ${catData.category}`;
+            details.appendChild(summary);
+            const div = document.createElement("div");
+            div.className = "ml-4 mt-2 space-y-2 border-l border-neutral-700 pl-4";
+            catData.items.forEach(item => {
+                const nodeDiv = document.createElement("div");
+                nodeDiv.draggable = true;
+                Object.assign(nodeDiv.dataset, { type: 'bjj-node', ...item, category: catData.category });
+                nodeDiv.className = `p-2 rounded-lg flex items-center cursor-move sidebar-card`;
+                nodeDiv.innerHTML = `<span class="w-1 h-5 rounded-full mr-3 flex-shrink-0" style="background-color: ${catStyle.color};"></span><span>${item.name_pt}</span>`;
+                nodeDiv.title = item.name_en; // Adiciona o tooltip com o nome em inglês
+                nodeDiv.addEventListener("dragstart", e => {
+                    e.dataTransfer.setData("node", JSON.stringify({ type: 'encyclopedia', ...item, category: catData.category }));
+                });
+                div.appendChild(nodeDiv);
+            });
+            details.appendChild(div);
+            encyclopediaEl.appendChild(details);
+        });
+        
+        lucide.createIcons();
+
+        // Lógica de busca
+        const searchInput = document.getElementById('search-input');
+        const allCategories = encyclopediaEl.querySelectorAll('details');
+        searchInput.addEventListener('input', e => {
+            const searchTerm = e.target.value.toLowerCase().trim();
+            allCategories.forEach(category => {
+                const items = category.querySelectorAll('.sidebar-card');
+                let hasVisibleItems = false;
+                items.forEach(item => {
+                    const isMatch = item.dataset.name_pt.toLowerCase().includes(searchTerm) || item.dataset.name_en.toLowerCase().includes(searchTerm);
+                    item.style.display = isMatch ? 'flex' : 'none';
+                    if (isMatch) hasVisibleItems = true;
+                });
+                category.style.display = hasVisibleItems ? 'block' : 'none';
+                
+                if (searchTerm && hasVisibleItems) {
+                    category.open = true;
+                } else if (!searchTerm) {
+                    category.open = false;
+                }
+            });
+        });
+
+        // Eventos de Drag and Drop
+        const drawflowEl = document.getElementById("drawflow");
+        drawflowEl.addEventListener("drop", e => {
+            e.preventDefault();
+            const nodeDataString = e.dataTransfer.getData("node");
+            if (!nodeDataString) return;
+            const nodeData = JSON.parse(nodeDataString);
+
+            // CORREÇÃO: Usar a fórmula correta que leva em conta o zoom e o pan.
+            const rect = editor.precanvas.getBoundingClientRect();
+            let pos_x = (e.clientX - rect.left) * (1 / editor.zoom);
+            let pos_y = (e.clientY - rect.top) * (1 / editor.zoom);
+            
+            // Ajuste para centralizar o card no cursor do mouse
+            const nodeWidth = 150; 
+            const nodeHeight = 70;
+            pos_x -= (nodeWidth / 2);
+            pos_y -= (nodeHeight / 2);
+            
+            const isAnnotation = nodeData.type === 'annotation';
+            const template = createNodeTemplate(nodeData.category, nodeData.name_pt, nodeData.name_en, isAnnotation);
+            editor.addNode(nodeData.name_pt || "Anotação", 1, 1, pos_x, pos_y, 'bjj-node', { ...nodeData }, template);
+            lucide.createIcons();
+        });
+        drawflowEl.addEventListener("dragover", e => e.preventDefault());
+        
+        // Setup dos Modais
+        const categoryModal = document.getElementById('category-modal');
+        const confirmModal = document.getElementById('confirmation-modal');
+        const errorModal = document.getElementById('error-modal');
+        
+        function closeModal(modal) { modal.classList.remove('show'); }
+        function showModal(modal) { modal.classList.add('show'); lucide.createIcons(); }
+
+        document.getElementById('add-custom-card-btn').addEventListener('click', () => {
+            const categoryGrid = document.getElementById('category-grid');
+            categoryGrid.innerHTML = '';
+
+            // Adiciona o botão de Texto primeiro
+            const textCatStyle = CATEGORY_STYLES["Texto"];
+            const textButton = document.createElement('button');
+            textButton.className = 'sidebar-card p-4 rounded-lg flex flex-col items-center justify-center cursor-pointer text-gray-300';
+            textButton.innerHTML = `<i data-lucide="${textCatStyle.icon}" class="w-8 h-8 mb-2" style="color:${textCatStyle.color};"></i><span class="text-sm font-semibold">Texto</span>`;
+            textButton.addEventListener('click', () => {
+                const centerX = (-editor.canvas_x + editor.precanvas.clientWidth / 2) / editor.zoom;
+                const centerY = (-editor.canvas_y + editor.precanvas.clientHeight / 2) / editor.zoom;
+                
+                const textNodeHtml = `<div class="text-node-content" contenteditable="true" data-placeholder="Digite seu título..."></div>`;
+                const newNodeId = editor.addNode('Texto', 0, 0, centerX, centerY, 'text-node', { text: '' }, textNodeHtml);
+                
+                setTimeout(() => {
+                    const newNodeElement = document.querySelector(`#node-${newNodeId} .text-node-content`);
+                    if (newNodeElement) {
+                        newNodeElement.focus();
+                    }
+                }, 50);
+
+                closeModal(categoryModal);
+            });
+            categoryGrid.appendChild(textButton);
+
+
+            // Adiciona as outras categorias de anotação
+            Object.keys(CATEGORY_STYLES).forEach(catName => {
+                if(catName === 'Texto') return; // Pula o de Texto que já foi adicionado
+                const catStyle = CATEGORY_STYLES[catName];
+                const button = document.createElement('button');
+                button.className = 'sidebar-card p-4 rounded-lg flex flex-col items-center justify-center cursor-pointer text-gray-300';
+                button.innerHTML = `<i data-lucide="${catStyle.icon}" class="w-8 h-8 mb-2" style="color:${catStyle.color};"></i><span class="text-sm font-semibold">${catName}</span>`;
+                button.addEventListener('click', () => {
+                    const nodeData = { type: 'annotation', name_pt: '', name_en: '', category: catName };
+                    const centerX = (-editor.canvas_x + editor.precanvas.clientWidth / 2) / editor.zoom;
+                    const centerY = (-editor.canvas_y + editor.precanvas.clientHeight / 2) / editor.zoom;
+                    const template = createNodeTemplate(nodeData.category, nodeData.name_pt, nodeData.name_en, true);
+                    const newNodeId = editor.addNode(catName, 1, 1, centerX, centerY, 'bjj-node', { ...nodeData }, template);
+                    
+                    setTimeout(() => {
+                        const newNodeElement = document.getElementById('node-' + newNodeId);
+                        if (newNodeElement) toggleEditMode(newNodeElement, editor, 'edit');
+                    }, 50);
+                    closeModal(categoryModal);
+                });
+                categoryGrid.appendChild(button);
+            });
+            showModal(categoryModal);
+        });
+
+        // Event Listeners dos Modais
+        [categoryModal, confirmModal, errorModal].forEach(modal => {
+            modal.addEventListener('click', e => { if (e.target === modal) closeModal(modal); });
+            modal.querySelector('button[id$="-cancel"], button[id$="-close"]')?.addEventListener('click', () => closeModal(modal));
+        });
+        document.getElementById('modal-confirm').addEventListener('click', () => { 
+            editor.clear(); 
+            document.getElementById('flowchart-title').textContent = '';
+            document.getElementById('flowchart-subtitle').textContent = '';
+            document.getElementById('flowchart-date').textContent = new Date().toLocaleDateString('pt-BR', { year: 'numeric', month: 'long', day: 'numeric' });
+            closeModal(confirmModal); 
+        });
+
+        // Ações nos Nós (Editar)
+        drawflowEl.addEventListener('click', e => {
+            const editBtn = e.target.closest('.edit-btn');
+            if (editBtn) toggleEditMode(editBtn.closest('.drawflow-node'), editor);
+        });
+
+        // Controles de Zoom e Limpeza
+        document.getElementById("zoom-in").onclick = () => editor.zoom_in();
+        document.getElementById("zoom-out").onclick = () => editor.zoom_out();
+        document.getElementById("zoom-reset").onclick = () => editor.zoom_reset();
+        document.getElementById("clear-canvas").onclick = () => showModal(confirmModal);
+
+        // Salvar e Carregar
+        const [saveBtn, loadBtn, loadInput] = [document.getElementById('save-btn'), document.getElementById('load-btn'), document.getElementById('load-input')];
+        saveBtn.addEventListener('click', () => {
+            const flowchartData = editor.export();
+            const nodes = flowchartData.drawflow.Home.data;
+
+            // Garante que o texto dos nós de texto seja salvo
+            for (const id in nodes) {
+                const nodeData = nodes[id];
+                const nodeElement = document.getElementById('node-' + id);
+                if (nodeElement && nodeElement.classList.contains('text-node')) {
+                    const textEl = nodeElement.querySelector('.text-node-content');
+                    nodeData.data.text = textEl.innerText;
+                    nodeData.html = `<div class="text-node-content" contenteditable="true" data-placeholder="Digite seu título...">${textEl.innerText}</div>`;
+                }
+            }
+
+
+            const fullData = {
+                metadata: {
+                    title: document.getElementById('flowchart-title').innerText,
+                    subtitle: document.getElementById('flowchart-subtitle').innerText,
+                    date: document.getElementById('flowchart-date').textContent
+                },
+                flowchartData
+            };
+            const jsonString = JSON.stringify(fullData, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            const safeTitle = (fullData.metadata.title || 'bjj_flowchart').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+            a.download = `${safeTitle}.json`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        });
+        loadBtn.addEventListener('click', () => loadInput.click());
+        loadInput.addEventListener('change', e => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (re) => {
+                try {
+                    const data = JSON.parse(re.target.result);
+                    const { metadata, flowchartData } = data;
+                    document.getElementById('flowchart-title').innerText = metadata?.title || '';
+                    document.getElementById('flowchart-subtitle').innerText = metadata?.subtitle || '';
+                    document.getElementById('flowchart-date').textContent = metadata?.date || new Date().toLocaleDateString('pt-BR');
+                    editor.import(flowchartData || data);
+                    setTimeout(() => {
+                        lucide.createIcons();
+                    }, 50);
+                } catch (err) {
+                    showErrorModal(`Arquivo de flowchart inválido ou corrompido.\n\nDetalhes: ${err.message}`);
+                }
+            };
+            reader.readAsText(file);
+            e.target.value = '';
+        });
+
+        // Lógica da UI Colapsável (Modo Foco)
+        const uiToggleBtn = document.getElementById('ui-toggle-btn');
+        uiToggleBtn.addEventListener('click', () => {
+            document.body.classList.toggle('focus-mode');
+            const icon = uiToggleBtn.querySelector('i');
+            if (document.body.classList.contains('focus-mode')) {
+                icon.setAttribute('data-lucide', 'eye-off');
+                uiToggleBtn.title = "Mostrar UI";
+            } else {
+                icon.setAttribute('data-lucide', 'eye');
+                uiToggleBtn.title = "Modo Foco";
+            }
+            lucide.createIcons();
+        });
+
+        // Lógica de Redimensionamento da Barra Lateral
+        const sidebar = document.getElementById('sidebar');
+        const resizer = document.getElementById('sidebar-resizer');
+        let isResizing = false;
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            document.body.classList.add('is-resizing');
+            sidebar.classList.add('no-transition');
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const newWidth = e.clientX;
+            // Limites para o redimensionamento
+            if (newWidth > 250 && newWidth < 600) {
+                sidebar.style.width = `${newWidth}px`;
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            isResizing = false;
+            document.body.classList.remove('is-resizing');
+            sidebar.classList.remove('no-transition');
+        });
+        
+        function showErrorModal(message) {
+            document.getElementById('error-message').textContent = message;
+            showModal(document.getElementById('error-modal'));
+        }
+    });
+  </script>
+</body>
+</html>
